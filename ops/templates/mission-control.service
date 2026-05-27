@@ -1,0 +1,16 @@
+[Unit]
+Description=Mission Control Dashboard
+After=network-online.target openclaw-gateway.service
+Wants=network-online.target openclaw-gateway.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/amish/mission-control
+Environment=PATH=/home/amish/.local/bin:/home/amish/.npm-global/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/amish/.local/bin/pnpm run start:standalone
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target
