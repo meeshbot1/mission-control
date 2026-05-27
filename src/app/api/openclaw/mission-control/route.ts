@@ -234,21 +234,16 @@ function collectDiscordActivity(sessions: GatewaySession[]): DiscordActivity[] {
 }
 
 async function listOmxTeams(projectPath: string): Promise<string[]> {
-  const teamDirs = [
-    path.join(projectPath, '.omx', 'state', 'team'),
-    path.join(projectPath, '.omx', 'team'),
-  ]
+  const teamDir = path.join(projectPath, '.omx', 'state', 'team')
   const names = new Set<string>()
 
-  for (const teamDir of teamDirs) {
-    try {
-      const entries = await fs.readdir(teamDir, { withFileTypes: true })
-      for (const entry of entries) {
-        if (entry.isDirectory()) names.add(entry.name)
-      }
-    } catch {
-      // Team state is optional until the first OMX team has been launched.
+  try {
+    const entries = await fs.readdir(teamDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.isDirectory()) names.add(entry.name)
     }
+  } catch {
+    // Team state is optional until the first OMX team has been launched.
   }
 
   return [...names].sort()
@@ -298,10 +293,7 @@ async function directoryExists(dirPath: string): Promise<boolean> {
 }
 
 async function hasOmxTeamState(projectPath: string): Promise<boolean> {
-  return (
-    await directoryExists(path.join(projectPath, '.omx', 'state', 'team')) ||
-    await directoryExists(path.join(projectPath, '.omx', 'team'))
-  )
+  return directoryExists(path.join(projectPath, '.omx', 'state', 'team'))
 }
 
 function getDefaultOmxDiscoveryRoots(homeDir: string): string[] {
