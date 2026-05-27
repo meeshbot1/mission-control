@@ -5,6 +5,7 @@ const config = [
   {
     ignores: [
       '.data/**',
+      '.omx/**',
       'ops/**',
       'test-results/**',
       'playwright-report/**',

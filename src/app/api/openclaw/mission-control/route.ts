@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { promises as fs } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { requireRole } from '@/lib/auth'
 import { getDatabase } from '@/lib/db'
@@ -32,6 +33,7 @@ type DiscordActivity = {
 }
 
 type OmxTeamSummary = {
+  projectPath: string
   teamName: string
   workerCount: number
   tasks: {
@@ -48,6 +50,11 @@ type OmxTeamSummary = {
     lastTurnAt: string | null
     turnsWithoutProgress: number
   }>
+}
+
+type OmxProjectSummary = {
+  projectPath: string
+  teams: OmxTeamSummary[]
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -256,8 +263,9 @@ async function loadOmxSummaries(projectPath: string): Promise<OmxTeamSummary[]> 
         ['team', 'api', 'get-summary', '--input', JSON.stringify({ team_name: teamName }), '--json'],
         { cwd: projectPath, timeoutMs: 10000 },
       )
-      const parsed = JSON.parse(stdout) as { data?: { summary?: OmxTeamSummary } }
-      return parsed.data?.summary ?? null
+      const parsed = JSON.parse(stdout) as { data?: { summary?: Omit<OmxTeamSummary, 'projectPath'> } }
+      const summary = parsed.data?.summary
+      return summary ? { projectPath, ...summary } : null
     } catch (error) {
       logger.warn({ err: error, teamName }, 'Failed to load OMX team summary')
       return null
@@ -267,19 +275,135 @@ async function loadOmxSummaries(projectPath: string): Promise<OmxTeamSummary[]> 
   return summaries.filter((summary): summary is OmxTeamSummary => Boolean(summary))
 }
 
+function readPositiveInt(value: unknown, fallback: number, max: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback
+  return Math.min(Math.floor(parsed), max)
+}
+
+function splitPathList(value: string | undefined): string[] {
+  return (value || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
+async function directoryExists(dirPath: string): Promise<boolean> {
+  try {
+    const stat = await fs.stat(dirPath)
+    return stat.isDirectory()
+  } catch {
+    return false
+  }
+}
+
+async function hasOmxTeamState(projectPath: string): Promise<boolean> {
+  return (
+    await directoryExists(path.join(projectPath, '.omx', 'state', 'team')) ||
+    await directoryExists(path.join(projectPath, '.omx', 'team'))
+  )
+}
+
+function getDefaultOmxDiscoveryRoots(homeDir: string): string[] {
+  return [
+    process.cwd(),
+    path.join(homeDir, 'workspace'),
+    path.join(homeDir, 'projects'),
+    path.join(homeDir, 'clawd-agents'),
+    path.join(homeDir, '.openclaw', 'workspace'),
+  ]
+}
+
+const IGNORED_DISCOVERY_DIRS = new Set([
+  '.git',
+  '.next',
+  '.omx',
+  '.turbo',
+  'coverage',
+  'dist',
+  'node_modules',
+  'out',
+  'target',
+])
+
+async function discoverOmxProjectsUnder(rootPath: string, maxDepth: number, results: Set<string>) {
+  const resolvedRoot = path.resolve(rootPath)
+  if (!(await directoryExists(resolvedRoot))) return
+
+  if (await hasOmxTeamState(resolvedRoot)) {
+    results.add(resolvedRoot)
+  }
+
+  if (maxDepth <= 0) return
+
+  let entries: Array<{ name: string; isDirectory(): boolean }>
+  try {
+    entries = await fs.readdir(resolvedRoot, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  const childDirs = entries
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => !IGNORED_DISCOVERY_DIRS.has(entry.name))
+    .filter((entry) => !entry.name.startsWith('.') || entry.name === '.openclaw')
+    .map((entry) => path.join(resolvedRoot, entry.name))
+    .sort()
+    .slice(0, 200)
+
+  await Promise.all(childDirs.map((childPath) => discoverOmxProjectsUnder(childPath, maxDepth - 1, results)))
+}
+
+async function discoverOmxProjectPaths(): Promise<string[]> {
+  const homeDir = os.homedir()
+  const explicitPaths = [
+    ...splitPathList(process.env.MISSION_CONTROL_OMX_PROJECT_PATHS),
+    ...splitPathList(process.env.MISSION_CONTROL_OMX_PROJECT_PATH),
+  ]
+  const discoveryRoots = splitPathList(process.env.MISSION_CONTROL_OMX_DISCOVERY_ROOTS)
+  const roots = discoveryRoots.length > 0 ? discoveryRoots : getDefaultOmxDiscoveryRoots(homeDir)
+  const discoveryDepth = readPositiveInt(process.env.MISSION_CONTROL_OMX_DISCOVERY_DEPTH, 3, 6)
+  const results = new Set<string>()
+
+  for (const projectPath of explicitPaths) {
+    const resolved = path.resolve(projectPath)
+    if (await directoryExists(resolved)) results.add(resolved)
+  }
+
+  for (const root of roots) {
+    await discoverOmxProjectsUnder(root, discoveryDepth, results)
+  }
+
+  if (results.size === 0) {
+    const cwd = path.resolve(process.cwd())
+    if (await directoryExists(cwd)) results.add(cwd)
+  }
+
+  return [...results].sort()
+}
+
+async function loadOmxProjectSummaries(): Promise<OmxProjectSummary[]> {
+  const projectPaths = await discoverOmxProjectPaths()
+  const projects = await Promise.all(projectPaths.slice(0, 12).map(async (projectPath) => ({
+    projectPath,
+    teams: await loadOmxSummaries(projectPath),
+  })))
+
+  return projects
+}
+
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const workspaceId = auth.user.workspace_id ?? 1
-  const projectPath = String(process.env.MISSION_CONTROL_OMX_PROJECT_PATH || process.cwd())
-
   try {
     const gatewaySessions = getAllGatewaySessions(60 * 60 * 1000, true)
-    const [gateway, omx] = await Promise.all([
+    const [gateway, omxProjects] = await Promise.all([
       loadGatewayHealth(),
-      loadOmxSummaries(projectPath),
+      loadOmxProjectSummaries(),
     ])
+    const omxTeams = omxProjects.flatMap((project) => project.teams)
 
     return NextResponse.json({
       generatedAt: Date.now(),
@@ -288,8 +412,10 @@ export async function GET(request: NextRequest) {
       tasks: loadTaskSummary(workspaceId),
       discordActivity: collectDiscordActivity(gatewaySessions),
       omx: {
-        projectPath,
-        teams: omx,
+        projectPath: omxProjects[0]?.projectPath ?? process.cwd(),
+        projectPaths: omxProjects.map((project) => project.projectPath),
+        projects: omxProjects,
+        teams: omxTeams,
       },
     })
   } catch (error) {

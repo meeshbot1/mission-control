@@ -2,6 +2,8 @@
 
 This guide covers the task orchestration patterns available in Mission Control, from simple manual assignment to fully automated multi-agent workflows.
 
+For the Discord/Telegram → OpenClaw dev PM → OMX team workflow used for long-running project work, see [OpenClaw Dev Lifecycle](openclaw-dev-lifecycle.md).
+
 ## Task Lifecycle
 
 Every task in Mission Control follows this status flow:

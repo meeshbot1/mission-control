@@ -351,6 +351,9 @@ See `.env.example` for the full list. Key variables:
 | `OPENCLAW_SECURITY_DENY_FS` | No | `0` | Deny filesystem tool group (opt-in; can block file workflows) |
 | `OPENCLAW_SECURITY_SANDBOX_ALL` | No | `1` | Force `agents.defaults.sandbox.mode="all"` when set (env-driven) |
 | `MISSION_CONTROL_DATA_DIR` | No | `.data/` | Directory for all Mission Control data files (DB, tokens, etc.). Use an absolute path with the standalone server to survive rebuilds. |
+| `MISSION_CONTROL_OMX_PROJECT_PATHS` | No | - | Comma-separated project repos to monitor for `.omx/state/team/*` runtimes. Use this for important repos outside the default discovery roots. |
+| `MISSION_CONTROL_OMX_DISCOVERY_ROOTS` | No | `~/workspace,~/projects,~/clawd-agents,~/.openclaw/workspace` | Comma-separated parent directories scanned for repo-local OMX team state. |
+| `MISSION_CONTROL_OMX_DISCOVERY_DEPTH` | No | `3` | Maximum directory depth scanned under each discovery root. |
 | `MC_ALLOWED_HOSTS` | No | `localhost,127.0.0.1` | Allowed hosts in production |
 | `MC_PORT` | No | `3000` | Host-side port that the bundled `docker-compose.yml` publishes the container's `PORT` on. The bundled `Makefile` expects `7012`. |
 | `ANTHROPIC_API_KEY` | No (Yes for direct dispatch) | - | Used when `dispatchModel` matches `claude-*` / `anthropic/*` and no gateway is available. |

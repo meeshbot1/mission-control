@@ -54,7 +54,31 @@ type OverviewPayload = {
   }>
   omx: {
     projectPath: string
+    projectPaths?: string[]
+    projects?: Array<{
+      projectPath: string
+      teams: Array<{
+        projectPath: string
+        teamName: string
+        workerCount: number
+        tasks: {
+          pending: number
+          in_progress: number
+          blocked: number
+          completed: number
+          failed: number
+          total: number
+        }
+        workers: Array<{
+          name: string
+          alive: boolean
+          lastTurnAt: string | null
+          turnsWithoutProgress: number
+        }>
+      }>
+    }>
     teams: Array<{
+      projectPath: string
       teamName: string
       workerCount: number
       tasks: {
@@ -85,6 +109,15 @@ function relativeTime(ts: number | null | undefined): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h ago`
   return `${Math.floor(hours / 24)}d ago`
+}
+
+function compactPath(projectPath: string): string {
+  if (!projectPath) return 'unknown project'
+  if (projectPath.startsWith('/home/')) {
+    const [, , user, ...rest] = projectPath.split('/')
+    return rest.length > 0 ? `~${user ? '' : ''}/${rest.join('/')}` : projectPath
+  }
+  return projectPath
 }
 
 function SectionTitle({ title, meta }: { title: string; meta?: string }) {
@@ -232,18 +265,20 @@ export function OpenClawMissionControlWidget(_: { data: DashboardData }) {
             </section>
 
             <section className="space-y-3">
-              <SectionTitle title="OMX Teams" meta={payload.omx.projectPath} />
+              <SectionTitle title="OMX Teams" meta={`${payload.omx.projectPaths?.length ?? 1} project root(s)`} />
               <div className="space-y-2">
                 {payload.omx.teams.length === 0 ? (
                   <div className="rounded-lg border border-border/60 bg-card/40 px-3 py-3 text-xs text-muted-foreground">
-                    No OMX team state found under this project yet.
+                    No OMX team state found under the configured project roots yet.
                   </div>
                 ) : payload.omx.teams.map((team) => (
-                  <div key={team.teamName} className="rounded-lg border border-border/60 bg-card/40 px-3 py-2.5">
+                  <div key={`${team.projectPath}:${team.teamName}`} className="rounded-lg border border-border/60 bg-card/40 px-3 py-2.5">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="text-xs font-medium text-foreground">{team.teamName}</div>
-                        <div className="text-2xs text-muted-foreground">{team.workerCount} workers</div>
+                        <div className="text-2xs text-muted-foreground">
+                          {team.workerCount} workers · {compactPath(team.projectPath)}
+                        </div>
                       </div>
                       <div className="text-right text-2xs text-muted-foreground">
                         <div>{team.tasks.in_progress} active</div>
