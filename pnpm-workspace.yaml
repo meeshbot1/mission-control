@@ -1,0 +1,22 @@
+packages:
+  - .
+
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  better-sqlite3: true
+  esbuild: true
+  node-pty: true
+  sharp: true
+  unrs-resolver: true
+  vue-demi: true
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - '@swc/core'
+  - better-sqlite3
+  - esbuild
+  - node-pty
+  - sharp
+  - unrs-resolver
+  - vue-demi

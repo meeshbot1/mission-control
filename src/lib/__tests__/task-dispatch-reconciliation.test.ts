@@ -107,6 +107,7 @@ vi.mock('../db', () => ({
 vi.mock('../config', () => ({
   config: {
     openclawHome: 'C:/openclaw',
+    openclawConfigPath: 'package.json',
     openclawStateDir: 'C:/openclaw',
   },
 }))

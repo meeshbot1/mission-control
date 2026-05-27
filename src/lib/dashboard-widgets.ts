@@ -10,6 +10,15 @@ export interface DashboardWidget {
 
 export const WIDGET_CATALOG: DashboardWidget[] = [
   {
+    id: 'openclaw-mission-control',
+    label: 'Mission Control Overview',
+    description: 'Live OpenClaw gateway, channels, sessions, Discord activity, and OMX team progress',
+    category: 'health',
+    modes: ['local', 'full'],
+    defaultSize: 'full',
+    component: 'OpenClawMissionControlWidget',
+  },
+  {
     id: 'briefing-bar',
     label: 'Briefing Bar',
     description: 'At-a-glance operational summary — what needs attention now',
@@ -147,6 +156,7 @@ export const WIDGET_CATALOG: DashboardWidget[] = [
 ]
 
 export const LOCAL_DEFAULT_LAYOUT = [
+  'openclaw-mission-control',
   'briefing-bar',
   'activity-timeline',
   'fleet-status',
@@ -156,6 +166,7 @@ export const LOCAL_DEFAULT_LAYOUT = [
 ]
 
 export const GATEWAY_DEFAULT_LAYOUT = [
+  'openclaw-mission-control',
   'briefing-bar',
   'activity-timeline',
   'fleet-status',

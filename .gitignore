@@ -38,6 +38,9 @@ playwright-report/
 .tmp/
 .playwright-mcp/
 
+# OMX team runtime state
+.omx/
+
 # Local QA screenshots
 /e2e-debug-*.png
 /e2e-channels-*.png

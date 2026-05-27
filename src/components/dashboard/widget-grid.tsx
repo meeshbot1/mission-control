@@ -21,8 +21,10 @@ import { ActivityTimelineWidget } from './widgets/activity-timeline-widget'
 import { FleetStatusWidget } from './widgets/fleet-status-widget'
 import { TaskPipelineWidget } from './widgets/task-pipeline-widget'
 import { SystemHealthWidget } from './widgets/system-health-widget'
+import { OpenClawMissionControlWidget } from './widgets/openclaw-mission-control-widget'
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType<{ data: DashboardData }>> = {
+  'openclaw-mission-control': OpenClawMissionControlWidget,
   'briefing-bar': BriefingBarWidget,
   'activity-timeline': ActivityTimelineWidget,
   'fleet-status': FleetStatusWidget,
