@@ -117,6 +117,38 @@ function scoreCategory(checks: Check[]): Category {
   return { score: weightedMax > 0 ? Math.round((weightedScore / weightedMax) * 100) : 100, checks }
 }
 
+/**
+ * OpenClaw supports both literal secrets and structured secret references such
+ * as `{ source: "env", id: "OPENCLAW_GATEWAY_TOKEN" }`. The security scan only
+ * needs to know whether a credential is configured; it must not assume the
+ * config contains the raw secret string or it will crash on env-backed configs.
+ */
+function hasConfiguredSecret(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0
+  if (!value || typeof value !== 'object') return false
+
+  const secretRef = value as Record<string, unknown>
+  return ['value', 'id', 'env', 'name', 'path'].some((key) => {
+    const candidate = secretRef[key]
+    return typeof candidate === 'string' && candidate.trim().length > 0
+  })
+}
+
+/**
+ * Report the credential source without revealing the credential itself. This
+ * keeps the scan useful for operators while preserving the env-reference model.
+ */
+function describeConfiguredSecret(kind: string, value: unknown): string {
+  if (typeof value === 'string') return `${kind} auth enabled`
+  if (!value || typeof value !== 'object') return `${kind} auth enabled`
+
+  const secretRef = value as Record<string, unknown>
+  const refId = ['id', 'env', 'name', 'path']
+    .map((key) => secretRef[key])
+    .find((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0)
+  return refId ? `${kind} auth enabled via ${refId}` : `${kind} auth enabled via secret reference`
+}
+
 // ---------------------------------------------------------------------------
 // Exec helpers
 // All exec calls below use only hardcoded string literals — no user input.
@@ -309,14 +341,18 @@ function scanOpenClaw(): Category {
   } catch { /* skip */ }
 
   const gwAuth = ocConfig?.gateway?.auth
-  const tokenOk = gwAuth?.mode === 'token' && (gwAuth?.token ?? '').trim().length > 0
-  const passwordOk = gwAuth?.mode === 'password' && (gwAuth?.password ?? '').trim().length > 0
+  const tokenOk = gwAuth?.mode === 'token' && hasConfiguredSecret(gwAuth?.token)
+  const passwordOk = gwAuth?.mode === 'password' && hasConfiguredSecret(gwAuth?.password)
   const authOk = tokenOk || passwordOk
   checks.push({
     id: 'gateway_auth',
     name: 'Gateway authentication',
     status: authOk ? 'pass' : 'fail',
-    detail: tokenOk ? 'Token auth enabled' : passwordOk ? 'Password auth enabled' : `Auth mode: ${gwAuth?.mode || 'none'} (credential required)`,
+    detail: tokenOk
+      ? describeConfiguredSecret('Token', gwAuth?.token)
+      : passwordOk
+        ? describeConfiguredSecret('Password', gwAuth?.password)
+        : `Auth mode: ${gwAuth?.mode || 'none'} (credential required)`,
     fix: !authOk ? 'Set gateway.auth.mode to "token" with gateway.auth.token, or "password" with gateway.auth.password' : '',
     severity: 'critical',
   })
@@ -719,9 +755,19 @@ function scanOS(): Category {
 
   if (isLinux) {
     const ufwStatus = tryExec('ufw status 2>/dev/null')
+    const ufwService = tryExec('systemctl is-active ufw 2>/dev/null')
+    let ufwConfigEnabled = false
+    try {
+      // Non-root Mission Control cannot run `ufw status`, but `/etc/ufw/ufw.conf`
+      // is world-readable on common Linux installs. Pair it with systemd state so
+      // the scan recognizes an active host firewall without requiring root.
+      ufwConfigEnabled = /^ENABLED=yes$/m.test(readFileSync('/etc/ufw/ufw.conf', 'utf-8'))
+    } catch {
+      // UFW may not be installed or config may be unreadable.
+    }
     const iptablesCount = tryExec('iptables -L -n 2>/dev/null | wc -l')
     const nftCount = tryExec('nft list ruleset 2>/dev/null | wc -l')
-    const hasUfw = ufwStatus?.includes('active')
+    const hasUfw = ufwStatus?.includes('active') || (ufwService === 'active' && ufwConfigEnabled)
     const hasIptables = iptablesCount ? parseInt(iptablesCount, 10) > 8 : false
     const hasNft = nftCount ? parseInt(nftCount, 10) > 0 : false
     checks.push({
